@@ -21,7 +21,7 @@ interface IsDisableParams {
 const messages = defineMessages({
   selectPlaceholder: {
     id: 'store/sku-selector.select.placeholder',
-    defaultMessage: '',
+    defaultMessage: 'Escolha uma opção',
   },
 })
 

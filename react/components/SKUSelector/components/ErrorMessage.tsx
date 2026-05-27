@@ -10,7 +10,10 @@ function ErrorMessage() {
   const className = `${handles.errorMessage} c-danger`
 
   return (
-    <FormattedMessage id="store/sku-selector.variation.select-an-option">
+    <FormattedMessage
+      id="store/sku-selector.variation.select-an-option"
+      defaultMessage="Selecione uma opção"
+    >
       {message => (
         <>
           {' '}

@@ -1,4 +1,6 @@
 {
   "admin/test": "teste",
-  "store/test": "teste"
+  "store/test": "teste",
+  "store/sku-selector.select.placeholder": "Escolha uma opção",
+  "store/sku-selector.variation.select-an-option": "Selecione uma opção"
 }
