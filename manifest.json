@@ -1,7 +1,7 @@
 {
   "vendor": "sunhouse",
   "name": "enhanced-sku-selector",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "title": "Enhanced SKU Selector",
   "description": "Enhanced SKU Selector for VTEX IO Apps - Support for multiple color variations and multiple specs.",
   "defaultLocale": "pt-BR",
