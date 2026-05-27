@@ -4,6 +4,7 @@ import React, {
   useMemo,
   memo,
   useCallback,
+  useRef,
   FC,
 } from 'react'
 import { filter, head, isEmpty, compose, keys, length } from 'ramda'
@@ -34,6 +35,7 @@ import {
   DisplayMode,
 } from './types'
 import useEffectSkipMount from './components/hooks/useEffectSkipMount'
+import { useSKUImageLabels } from '../../contexts/SKUImageLabelsContext'
 
 const keyCount = compose(length, keys)
 const filterSelected = filter(Boolean)
@@ -185,6 +187,7 @@ const useImagesMap = (
     const variationNames = Object.keys(variations)
 
     const result: ImageMap = {}
+    const collectedLabels: string[] = [] // Array para coletar labels
 
     // for (const variationName of variationNames) {
     //   // Today, only "Color" variation should show image, need to find a more resilient way to tell this, waiting for backend
@@ -202,18 +205,25 @@ const useImagesMap = (
           sku => sku.variationValues[variationName] === variationValue.name
         )
 
-        imageMap[variationValue.name] = findImageForVariationValue(
+        const matchedImage = findImageForVariationValue(
           item,
           variationOriginalName,
           variationValue.originalName ?? variationValue.name,
           thumbnailImage
         )
+
+        imageMap[variationValue.name] = matchedImage
+
+        // Coletar o imageLabel se a imagem foi encontrada
+        if (matchedImage?.imageLabel) {
+          collectedLabels.push(matchedImage.imageLabel)
+        }
       }
 
       result[variationName] = imageMap
     }
 
-    return result
+    return { imageMap: result, collectedLabels }
   }, [items, variations, thumbnailImage])
 }
 
@@ -367,7 +377,40 @@ const SKUSelectorContainer: FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const imagesMap = useImagesMap(parsedItems, variations, thumbnailImage)
+  const { imageMap: imagesMap, collectedLabels } = useImagesMap(parsedItems, variations, thumbnailImage)
+  const { addHiddenImageLabels } = useSKUImageLabels()
+
+  // Adicionar labels coletados ao contexto para ocultar no product-images
+  // Usar useRef para evitar adicionar os mesmos labels repetidamente
+  const previousLabelsRef = useRef<string>('')
+  const hasLoggedRef = useRef(false)
+  
+  useEffect(() => {
+    if (collectedLabels.length > 0) {
+      // Criar uma string única dos labels para comparar (ordenada para consistência)
+      const sortedLabels = [...collectedLabels].sort()
+      const labelsKey = sortedLabels.join('|')
+      
+      // Só adicionar se os labels mudaram
+      if (labelsKey !== previousLabelsRef.current) {
+        previousLabelsRef.current = labelsKey
+        
+        // Log apenas uma vez na primeira execução
+        if (!hasLoggedRef.current && typeof window !== 'undefined') {
+          console.log('[SKUSelector] ✅ Hook useSKUImageLabels carregado com sucesso')
+          hasLoggedRef.current = true
+        }
+        
+        if (typeof window !== 'undefined') {
+          console.log('[SKUSelector] Total de labels coletados:', collectedLabels.length)
+          console.log('[SKUSelector] Labels coletados:', collectedLabels)
+          console.log('[SKUSelector] Adicionando labels ao contexto')
+        }
+        
+        addHiddenImageLabels(collectedLabels)
+      }
+    }
+  }, [collectedLabels, addHiddenImageLabels])
 
   const dispatch = useProductDispatch()
 

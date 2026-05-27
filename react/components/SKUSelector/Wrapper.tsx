@@ -20,6 +20,7 @@ import {
   CSS_HANDLES as SKUSelectorCssHandles,
 } from './components/SKUSelector'
 import { SKUSelectorCssHandlesProvider } from './SKUSelectorCssHandles'
+import { SKUImageLabelsProvider } from '../../contexts/SKUImageLabelsContext'
 
 export const SKU_SELECTOR_CSS_HANDLES = [
   ...ErrorMessageCssHandles,
@@ -241,37 +242,46 @@ function SKUSelectorWrapper(props: Props) {
     showValueForVariation = 'image'
   }
 
+  // Log para confirmar que o Provider está sendo renderizado
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      console.log('[SKUSelector] Wrapper renderizado com SKUImageLabelsProvider')
+    }
+  }, [])
+
   return (
-    <SKUSelectorCssHandlesProvider
-      handles={handles}
-      withModifiers={withModifiers}
-    >
-      <SKUSelector
-        skuItems={skuItems}
-        variations={variations}
-        imageWidth={imageWidth}
-        skuSelected={skuSelected}
-        maxItems={props.maxItems}
-        imageHeight={imageHeight}
-        displayMode={props.displayMode}
-        seeMoreLabel={props.seeMoreLabel}
-        onSKUSelected={props.onSKUSelected}
-        thumbnailImage={props.thumbnailImage}
-        initialSelection={props.initialSelection}
-        variationsSpacing={props.variationsSpacing}
-        showValueForVariation={showValueForVariation}
-        showVariationsLabels={props.showVariationsLabels}
-        hideImpossibleCombinations={props.hideImpossibleCombinations}
-        disableUnavailableSelectOptions={props.disableUnavailableSelectOptions}
-        showVariationsErrorMessage={props.showVariationsErrorMessage}
-        sliderItemsPerPage={props.sliderItemsPerPage}
-        sliderArrowSize={props.sliderArrowSize}
-        sliderDisplayThreshold={props.sliderDisplayThreshold}
-        sortVariationsByLabel={props.sortVariationsByLabel}
-        showImagePopper={props.showImagePopper}
-        popperImageSize={props.popperImageSize}
-      />
-    </SKUSelectorCssHandlesProvider>
+    <SKUImageLabelsProvider>
+      <SKUSelectorCssHandlesProvider
+        handles={handles}
+        withModifiers={withModifiers}
+      >
+        <SKUSelector
+          skuItems={skuItems}
+          variations={variations}
+          imageWidth={imageWidth}
+          skuSelected={skuSelected}
+          maxItems={props.maxItems}
+          imageHeight={imageHeight}
+          displayMode={props.displayMode}
+          seeMoreLabel={props.seeMoreLabel}
+          onSKUSelected={props.onSKUSelected}
+          thumbnailImage={props.thumbnailImage}
+          initialSelection={props.initialSelection}
+          variationsSpacing={props.variationsSpacing}
+          showValueForVariation={showValueForVariation}
+          showVariationsLabels={props.showVariationsLabels}
+          hideImpossibleCombinations={props.hideImpossibleCombinations}
+          disableUnavailableSelectOptions={props.disableUnavailableSelectOptions}
+          showVariationsErrorMessage={props.showVariationsErrorMessage}
+          sliderItemsPerPage={props.sliderItemsPerPage}
+          sliderArrowSize={props.sliderArrowSize}
+          sliderDisplayThreshold={props.sliderDisplayThreshold}
+          sortVariationsByLabel={props.sortVariationsByLabel}
+          showImagePopper={props.showImagePopper}
+          popperImageSize={props.popperImageSize}
+        />
+      </SKUSelectorCssHandlesProvider>
+    </SKUImageLabelsProvider>
   )
 }
 
