@@ -3,5 +3,12 @@
   "root": true,
   "env": {
     "node": true
+  },
+  // Bloco isolado: pode ser removido inteiro sem afetar o resto da config.
+  // Ligado apenas o rules-of-hooks (evita o React #310/#300 em transicoes SPA);
+  // exhaustive-deps fica de fora de proposito.
+  "plugins": ["react-hooks"],
+  "rules": {
+    "react-hooks/rules-of-hooks": "error"
   }
 }

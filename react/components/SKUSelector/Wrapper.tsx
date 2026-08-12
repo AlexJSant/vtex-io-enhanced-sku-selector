@@ -242,13 +242,6 @@ function SKUSelectorWrapper(props: Props) {
     showValueForVariation = 'image'
   }
 
-  // Log para confirmar que o Provider está sendo renderizado
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      console.log('[SKUSelector] Wrapper renderizado com SKUImageLabelsProvider')
-    }
-  }, [])
-
   return (
     <SKUImageLabelsProvider>
       <SKUSelectorCssHandlesProvider
