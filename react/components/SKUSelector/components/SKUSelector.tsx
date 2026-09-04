@@ -77,6 +77,7 @@ interface Props {
   showBorders?: boolean
   imageHeight?: number
   imageWidth?: number
+  thumbnailImageSize?: number
   showVariationsLabels: ShowVariationsLabels
   variationsSpacing?: number
   showVariationsErrorMessage: boolean
@@ -377,6 +378,7 @@ function SKUSelector({
   imagesMap,
   imageHeight,
   imageWidth,
+  thumbnailImageSize,
   showBorders,
   displayMode,
   selectedVariations,
@@ -471,6 +473,7 @@ function SKUSelector({
             maxItems={maxItems}
             imageWidth={imageWidth}
             imageHeight={imageHeight}
+            thumbnailImageSize={thumbnailImageSize}
             showBorders={showBorders}
             variation={variationOption}
             selectedItem={selectedItem}

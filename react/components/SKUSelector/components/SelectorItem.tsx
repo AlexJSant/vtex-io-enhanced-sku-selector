@@ -3,7 +3,8 @@ import classNames from 'classnames'
 import { FormattedNumber } from 'react-intl'
 
 import { useSKUSelectorCssHandles } from '../SKUSelectorCssHandles'
-import { slug, changeImageUrlSize } from '../utils'
+import { slug, imageUrlForDisplaySize } from '../utils'
+import { VARIATION_IMG_SIZE } from '../../module/images'
 import ImagePopper from './ImagePopper'
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
   isImpossible: boolean
   imageHeight?: number | string
   imageWidth?: number | string
+  thumbnailImageSize?: number
   showBorders?: boolean
   variationLabel: string
   label: string
@@ -36,6 +38,14 @@ const getDiscount = (maxPrice?: number | null, price?: number | null) => {
   }
 
   return discount
+}
+
+const toDisplayPixels = (value?: number | string) => {
+  if (typeof value === 'number') return value
+
+  const parsed = typeof value === 'string' ? parseFloat(value) : NaN
+
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 export const CSS_HANDLES = [
@@ -69,6 +79,7 @@ function SelectorItem({
   isImpossible,
   imageHeight,
   imageWidth,
+  thumbnailImageSize,
   showBorders = true,
   variationLabel,
   label,
@@ -108,16 +119,41 @@ function SelectorItem({
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
   const passedAnyDimension = Boolean(imageHeight || imageWidth)
   let containerStyles = {}
+  let imageSrcSet: string | undefined
 
-  if (isImage && passedAnyDimension && imageUrl) {
-    containerStyles = {
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-      height: imageHeight || 'auto',
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-      width: imageWidth || 'auto',
-      padding: 0,
+  if (isImage && imageUrl) {
+    if (passedAnyDimension) {
+      containerStyles = {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        height: imageHeight || 'auto',
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        width: imageWidth || 'auto',
+        padding: 0,
+      }
     }
-    imageUrl = changeImageUrlSize(imageUrl, imageWidth, imageHeight)
+
+    // Only the downloaded size: imageWidth/imageHeight keep driving the layout,
+    // which stores often override through CSS, so they cannot be trusted here.
+    const thumbnailSize =
+      toDisplayPixels(thumbnailImageSize) ?? VARIATION_IMG_SIZE
+
+    const imageUrl1x = imageUrlForDisplaySize(
+      imageUrl,
+      thumbnailSize,
+      thumbnailSize
+    )
+
+    const imageUrl2x = imageUrlForDisplaySize(
+      imageUrl,
+      thumbnailSize * 2,
+      thumbnailSize * 2
+    )
+
+    imageUrl = imageUrl1x
+    imageSrcSet =
+      imageUrl1x && imageUrl2x
+        ? `${imageUrl1x} 1x, ${imageUrl2x} 2x`
+        : undefined
   }
 
   let itemTextValue = variationValue
@@ -176,6 +212,7 @@ function SelectorItem({
             <img
               className={handles.skuSelectorItemImageValue}
               src={imageUrl}
+              srcSet={imageSrcSet}
               alt={imageLabel as string | undefined}
             />
           ) : (

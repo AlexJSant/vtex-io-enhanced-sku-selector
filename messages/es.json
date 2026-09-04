@@ -1,6 +1,13 @@
 {
-  "admin/test": "teste",
-  "store/test": "teste",
+  "admin/test": "prueba",
+  "admin/editor.skuSelector.title": "Enhanced SKU Selector",
+  "admin/editor.skuSelector.description": "Selector de variaciones del producto con miniaturas de imagen para variaciones de color compuestas",
+  "admin/editor.skuSelector.thumbnailImageSize.title": "Tamaño de la imagen descargada de la miniatura",
+  "admin/editor.skuSelector.thumbnailImageSize.description": "Tamaño, en píxeles, del archivo de imagen descargado para cada miniatura de variación. Independiente del tamaño renderizado definido por imageWidth/imageHeight.",
+  "admin/editor.skuSelector.seeMoreLabel.title": "Etiqueta de \"Ver más\"",
+  "admin/editor.skuSelector.seeMoreLabel.description": "Texto del botón que se muestra cuando hay más variaciones que el límite definido en maxItems",
+  "store/test": "prueba",
+  "store/skuSelector.seeMore": "Ver más",
   "store/sku-selector.select.placeholder": "Elige una opción",
   "store/sku-selector.variation.select-an-option": "Selecciona una opción"
 }

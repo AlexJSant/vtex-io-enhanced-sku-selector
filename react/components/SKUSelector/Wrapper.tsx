@@ -164,6 +164,7 @@ interface Props {
   showValueForVariation?: ShowValueForVariation
   imageHeight?: ResponsiveValuesTypes.ResponsiveValue<number>
   imageWidth?: ResponsiveValuesTypes.ResponsiveValue<number>
+  thumbnailImageSize?: ResponsiveValuesTypes.ResponsiveValue<number>
   thumbnailImage?: string
   visibleVariations?: string[]
   showVariationsLabels?: ShowVariationsLabels
@@ -188,8 +189,8 @@ function SKUSelectorWrapper(props: Props) {
 
   const valuesFromContext = useProduct()
   const dispatch = useProductDispatch()
-  const { imageHeight, imageWidth } = useResponsiveValues(
-    pick(['imageHeight', 'imageWidth'], props)
+  const { imageHeight, imageWidth, thumbnailImageSize } = useResponsiveValues(
+    pick(['imageHeight', 'imageWidth', 'thumbnailImageSize'], props)
   )
 
   const shouldSelectInitialSKU = props.initialSelection !== 'empty'
@@ -255,6 +256,7 @@ function SKUSelectorWrapper(props: Props) {
           skuSelected={skuSelected}
           maxItems={props.maxItems}
           imageHeight={imageHeight}
+          thumbnailImageSize={thumbnailImageSize}
           displayMode={props.displayMode}
           seeMoreLabel={props.seeMoreLabel}
           onSKUSelected={props.onSKUSelected}
@@ -281,6 +283,19 @@ function SKUSelectorWrapper(props: Props) {
 SKUSelectorWrapper.schema = {
   title: 'admin/editor.skuSelector.title',
   description: 'admin/editor.skuSelector.description',
+  type: 'object',
+  properties: {
+    thumbnailImageSize: {
+      title: 'admin/editor.skuSelector.thumbnailImageSize.title',
+      description: 'admin/editor.skuSelector.thumbnailImageSize.description',
+      type: 'number',
+      default: 40,
+      minimum: 1,
+      // Thumbnails are requested as squares, so the effective ceiling is the
+      // narrower of the two clamps applied in utils (MAX_WIDTH = 3000).
+      maximum: 3000,
+    },
+  },
 }
 
 export default SKUSelectorWrapper

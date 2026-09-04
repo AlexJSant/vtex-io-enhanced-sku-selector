@@ -829,6 +829,10 @@ popperImageSize={props.popperImageSize}
    - Decidido passar URL original (sem redimensionar) para o popper
    - Motivo: Melhor qualidade da imagem ampliada
    - `imageUrl` continua sendo usado para o thumbnail (já redimensionado)
+   - ⚠️ **Correção (ver "Otimização de Download do Swatch Trigger"):** o popper
+     recebe a URL original, mas **sempre** a redimensiona internamente para
+     `popperImageSize`. A afirmação "sem redimensionar" descreve apenas a URL
+     que entra no componente, não a que é baixada pelo navegador.
 
 5. **Exibir nome do acabamento no popper:**
    - Decidido adicionar `variationValueOriginalName` abaixo da imagem
@@ -838,11 +842,14 @@ popperImageSize={props.popperImageSize}
 
 ### Considerações Futuras
 
-- ⏳ Adicionar suporte a touch events para mobile
+- ✅ Adicionar suporte a touch events para mobile — resolvido de forma
+  equivalente pelo botão "Ver detalhes" + `ImageModal` (v1.2.0), que substitui
+  o hover no mobile em vez de depender de touch no swatch
 - ⏳ Tornar delays configuráveis via props (`delayShow`, `delayHide`)
 - ⏳ Adicionar animação de fade in/out
 - ⏳ Suporte a posicionamento customizável (top, bottom, left, right)
-- ⏳ Adicionar opção de modal/lightbox para mobile
+- ✅ Adicionar opção de modal/lightbox para mobile — resolvido na v1.2.0 com
+  `ImageModal.tsx`, acionado pelo `useIsMobile(1024)` no `Variation.tsx`
 
 ---
 
@@ -852,7 +859,7 @@ popperImageSize={props.popperImageSize}
 2. ✅ Testes em ambiente de desenvolvimento
 3. ⏳ Testes em ambiente de staging
 4. ⏳ Validação com usuários reais
-5. ⏳ Considerar suporte mobile (touch events)
+5. ✅ Considerar suporte mobile (touch events) — coberto pelo `ImageModal` (v1.2.0)
 6. ⏳ Deploy em produção
 
 ---
@@ -1139,3 +1146,455 @@ O nome do acabamento pode ser customizado via classe CSS:
 **Revisado por:** -  
 **Status:** ✅ Implementado e Testado  
 **Data de Conclusão:** 2025-01-XX
+
+---
+
+# Development Log - Otimização de Download do Swatch Trigger
+
+## 📅 Data: 2026-09-01
+
+## 📋 Resumo das Alterações
+
+O swatch pequeno da lista de variações (`skuSelectorItemImageValue`) era renderizado
+em 36x36px mas baixava um arquivo de 300x300px (~53kB por variação), impactando LCP e
+peso da PDP. O tamanho baixado passou a ser controlado por uma prop própria
+(`thumbnailImageSize`), independente das props de layout, e o `<img>` ganhou `srcset`
+com descritores de densidade. O popover continua baixando em 300x300, agora com o
+tamanho gravado no path da URL, que é a única forma que a VTEX Image API respeita.
+
+## 🎯 Objetivo
+
+Reduzir o peso do swatch trigger sem alterar layout, sem hardcodar dimensões e sem
+degradar a qualidade do popover, que depende propositalmente de uma imagem maior.
+
+---
+
+## 🔍 Descoberta Central: Como a VTEX Define o Tamanho Servido
+
+Em URLs `/arquivos/ids/…`, os parâmetros `width`/`height`/`aspect` da querystring são
+**completamente ignorados**. O tamanho servido vem exclusivamente do segmento do path
+imediatamente após o id da imagem.
+
+Medições reais contra `sunhouse.vtexassets.com` (bytes e dimensões intrínsecas lidos
+do binário retornado):
+
+| URL solicitada | Bytes | Intrinsic |
+|----------------|-------|-----------|
+| `ids/249632-300-300?width=300&height=300&aspect=true` | 67.763 | 300x300 |
+| `ids/249632-300-300?width=40&height=40&aspect=true` | 67.763 | 300x300 |
+| `ids/249632-40-40` (sem querystring) | 1.435 | 40x40 |
+| `ids/249632?width=40&height=40&aspect=true` | 619.382 | 986x926 |
+
+**Conclusão:** a segunda linha prova que a querystring não altera nada, e a quarta
+prova que, sem o segmento de tamanho no path, a imagem original inteira é servida.
+Qualquer tentativa de otimização via querystring nesse tipo de URL é inócua.
+
+---
+
+## 🔧 Arquivos Modificados
+
+### 1. **`react/components/SKUSelector/utils/index.ts`**
+
+#### Mudança 1: Novo helper `stripImageSizeParams`
+
+Remove `width`/`height`/`aspect` pré-existentes na querystring, evitando que um
+tamanho antigo permaneça na URL contradizendo o novo.
+
+#### Mudança 2: Novo helper `imageUrlForDisplaySize`
+
+```typescript
+const imageIdSegmentRegex = /(\/ids\/\d+)(-[^/?]*)?/
+
+export function imageUrlForDisplaySize(
+  imageUrl: string,
+  width: number,
+  height: number
+) {
+  if (!imageUrl) return imageUrl
+
+  const adjustedWidth = Math.min(width, MAX_WIDTH)
+  const adjustedHeight = Math.min(height, MAX_HEIGHT)
+  const cleanedImageUrl = stripImageSizeParams(imageUrl)
+  const [path, queryString] = cleanedImageUrl.split('?')
+
+  if (!imageIdSegmentRegex.test(path)) {
+    return changeImageUrlSize(cleanedImageUrl, adjustedWidth, adjustedHeight)
+  }
+
+  const resizedPath = path.replace(
+    imageIdSegmentRegex,
+    `$1-${adjustedWidth}-${adjustedHeight}`
+  )
+
+  return queryString ? `${resizedPath}?${queryString}` : resizedPath
+}
+```
+
+**Impacto:**
+- Reescreve o segmento de tamanho no path, tratando os três formatos possíveis:
+  `ids/249632`, `ids/249632-300-300` e `ids/249632-80-auto`
+- Preserva o nome do arquivo e o `?v=` (o antigo `changeImageUrlSize` truncava a URL
+  no id e descartava ambos), mantendo o versionamento de cache
+- Mantém a estratégia de querystring apenas para URLs sem segmento `/ids/`, onde ela
+  de fato funciona
+- Respeita os limites `MAX_WIDTH`/`MAX_HEIGHT`
+
+### 2. **`react/components/SKUSelector/components/SelectorItem.tsx`**
+
+#### Mudança 1: Tamanho baixado desacoplado do layout
+
+```typescript
+// Only the downloaded size: imageWidth/imageHeight keep driving the layout,
+// which stores often override through CSS, so they cannot be trusted here.
+const thumbnailSize =
+  toDisplayPixels(thumbnailImageSize) ?? VARIATION_IMG_SIZE
+
+const imageUrl1x = imageUrlForDisplaySize(imageUrl, thumbnailSize, thumbnailSize)
+const imageUrl2x = imageUrlForDisplaySize(imageUrl, thumbnailSize * 2, thumbnailSize * 2)
+```
+
+**Motivo:** `imageWidth`/`imageHeight` não são fonte confiável para o download.
+Na loja Sunhouse elas valem 300 (o que gerava o arquivo de 300x300), enquanto o CSS
+da loja renderiza o swatch em 36x36. O app não tem como saber do override de CSS
+antes do render, e medir em runtime não resolveria: quando o `<img>` existe no DOM
+para ser medido, o download já foi disparado.
+
+#### Mudança 2: `srcset` com descritores de densidade
+
+```typescript
+<img
+  className={handles.skuSelectorItemImageValue}
+  src={imageUrl}
+  srcSet={imageSrcSet}
+  alt={imageLabel as string | undefined}
+/>
+```
+
+`src` permanece como fallback 1x; o `srcset` oferece 1x e 2x, deixando o navegador
+escolher conforme o `devicePixelRatio`.
+
+**Impacto:** nenhum atributo `width`/`height` e nenhum CSS foi alterado — o tamanho
+renderizado e o CLS permanecem idênticos.
+
+### 3. **Threading da prop `thumbnailImageSize`**
+
+A prop foi adicionada em toda a cadeia, seguindo o padrão já existente para
+`imageWidth`/`imageHeight`:
+
+- `Wrapper.tsx` — entra no `useResponsiveValues`, aceitando `{ desktop, mobile }`
+- `index.tsx` (`SKUSelectorContainer`) — repassa ao `SKUSelector`
+- `components/SKUSelector.tsx` — repassa ao `Variation`
+- `components/Variation.tsx` — repassa ao `SelectorItem`
+
+### 4. **`react/components/SKUSelector/components/ImagePopper.tsx`**
+
+#### Mudança 1: Resize pelo path
+
+```typescript
+// Resize image for popper (larger than thumbnail). The size has to be
+// written in the url path, since the width/height querystring params are
+// ignored on /arquivos/ids/ urls.
+const popperImageUrl = imageUrlForDisplaySize(
+    imageUrl,
+    popperImageSize,
+    popperImageSize
+)
+```
+
+**Impacto:** nenhuma mudança de tamanho, layout ou peso (medido: 67.763 B / 300x300
+antes e depois com `popperImageSize: 300`). O ganho é robustez — antes, URLs que não
+casassem com o padrão legado `/arquivos/ids/` cairiam em parâmetros de querystring
+ignorados pelo servidor.
+
+#### Mudança 2: Prefetch no hover
+
+```typescript
+const handleMouseEnter = () => {
+    // Starts downloading during the delay below, since the trigger
+    // thumbnail no longer warms up this image for the popper.
+    if (!hasPrefetchedRef.current && popperImageUrl) {
+        hasPrefetchedRef.current = true
+        const preloader = new window.Image()
+
+        preloader.src = popperImageUrl
+    }
+    // ...
+}
+```
+
+**Motivo:** antes o popover herdava de graça o download de 300x300 já feito pelo
+trigger; com o trigger em 40x40 isso deixou de existir. O prefetch aproveita os 100ms
+de delay que já antecediam o mount, dispara uma única vez por swatch e só no hover —
+zero custo no carregamento da página.
+
+### 5. **`docs/README.md`**
+
+Documentada a nova prop `thumbnailImageSize` na tabela de props.
+
+---
+
+## ✅ Comportamento Final
+
+### Separação de Responsabilidades
+
+| Prop | Controla | Não controla |
+|------|----------|--------------|
+| `thumbnailImageSize` | Arquivo baixado pelo swatch trigger (1x e 2x) | Layout |
+| `imageWidth` / `imageHeight` | Box renderizado do swatch | Arquivo baixado |
+| `popperImageSize` | Arquivo baixado **e** tamanho máximo exibido no popover | Swatch trigger |
+
+### Resultado Medido
+
+URL real da loja: `ids/249632-300-300/corda-cor-terracota.png?v=639116818881470000`
+
+| Elemento | URL solicitada | Bytes | Intrinsic |
+|----------|----------------|-------|-----------|
+| Trigger — antes | `-300-300/corda…png?v=…` | 67.763 | 300x300 |
+| Trigger — `src`/1x | `-40-40/corda…png?v=…` | 1.435 | 40x40 |
+| Trigger — `srcset` 2x | `-80-80/corda…png?v=…` | 5.008 | 80x80 |
+| Popover — antes | `-300-300?width=300&height=300&aspect=true` | 67.763 | 300x300 |
+| Popover — depois | `-300-300/corda…png?v=…` | 67.763 | 300x300 |
+
+Redução de **~98%** no swatch em telas 1x, multiplicada pelo número de variações da
+PDP. Popover inalterado.
+
+---
+
+## 🔄 Compatibilidade
+
+### Backward Compatibility
+- ✅ Nenhuma prop existente mudou de tipo, nome ou default
+- ✅ Nenhum atributo HTML de dimensão ou regra CSS foi alterado
+- ✅ `changeImageUrlSize` e `stripImageSizeParams` continuam exportados
+- ⚠️ O arquivo baixado pelo swatch muda de tamanho por padrão. Lojas que dependiam
+  do swatch para pré-aquecer o cache de imagens grandes devem usar
+  `thumbnailImageSize` para restaurar o comportamento anterior
+
+### Breaking Changes
+- ❌ **Nenhum** breaking change de API
+
+---
+
+## 🧪 Validação
+
+Executada com download real das URLs contra `sunhouse.vtexassets.com`, lendo bytes e
+dimensões intrínsecas diretamente do cabeçalho PNG/JPEG de cada resposta.
+
+| Cenário | Comportamento Esperado | Status |
+|---------|------------------------|--------|
+| URL crua com `-300-300` no path | Reescrita para `-40-40` | ✅ 1.435 B / 40x40 |
+| URL crua sem segmento de tamanho | Recebe `-40-40` | ✅ 1.435 B / 40x40 |
+| URL com filename e `?v=` | Ambos preservados | ✅ 200 OK |
+| URL com `-1000-auto` | Substituído por `-40-40` | ✅ 1.435 B / 40x40 |
+| URL fora do padrão `/ids/` | Mantém estratégia de querystring | ✅ Sem duplicação |
+| `srcset` 2x | Solicita o dobro | ✅ 5.008 B / 80x80 |
+| `thumbnailImageSize: 60` | Solicita `-60-60` e `-120-120` | ✅ 2.936 B e 10.418 B |
+| Clamp `MAX_WIDTH`/`MAX_HEIGHT` | 9999 → `-3000-4000` | ✅ Respeitado |
+| Popover com `popperImageSize: 300` | Continua 300x300 | ✅ 67.763 B (idêntico) |
+| Parâmetros duplicados na URL final | Nenhum | ✅ Zero ocorrências |
+
+**Observação:** `ReadLints` sem erros nos arquivos alterados da lógica de
+resize. Execução local de `yarn test` e o harness de Jest ficaram para a
+rodada de 2026-09-04 (ver seção correspondente). Nenhum snapshot existente
+referenciava `skuSelectorItemImageValue` ou `srcSet` naquela data.
+
+---
+
+## 🐛 Problemas Resolvidos
+
+1. **Swatch baixando imagem 8x maior que a exibida:**
+   - **Problema:** 300x300 (~53kB) para exibir 36x36, multiplicado por variação
+   - **Solução:** `thumbnailImageSize` com default `VARIATION_IMG_SIZE` (40)
+
+2. **Otimização via querystring era inócua:**
+   - **Problema:** `?width=&height=&aspect=` é ignorado em URLs `/arquivos/ids/`
+   - **Solução:** `imageUrlForDisplaySize` grava o tamanho no path
+
+3. **Perda do `?v=` e do filename ao redimensionar:**
+   - **Problema:** `changeImageUrlSize` truncava a URL no id da imagem
+   - **Solução:** o novo helper preserva path restante e querystring
+
+4. **Ausência de suporte a telas de alta densidade:**
+   - **Problema:** um único `src`, sem alternativa para DPR 2
+   - **Solução:** `srcset` com descritores `1x`/`2x`
+
+---
+
+## 📝 Notas Técnicas
+
+### Decisões de Design
+
+1. **Prop nova em vez de derivar de `imageWidth`/`imageHeight`:**
+   - Considerado e rejeitado: usar `imageWidth` como fonte do download, porque o CSS
+     da loja pode sobrescrever o box (e sobrescreve, na Sunhouse)
+   - Considerado e rejeitado: cap arbitrário no tamanho pedido, por introduzir
+     constante mágica
+   - Considerado e rejeitado: medir o elemento em runtime, por não evitar o primeiro
+     download, que é justamente o que impacta LCP
+
+2. **Descritores de densidade em vez de `sizes` + descritores de largura:**
+   - O swatch tem tamanho fixo, não fluido; `1x`/`2x` é suficiente e dispensa `sizes`
+
+3. **Prefetch apenas no hover:**
+   - Mantém o carregamento inicial da página limpo e preserva a sensação de
+     instantaneidade do popover que existia por efeito colateral
+
+### Verificação da Renderização Condicional do Popover
+
+Confirmado por inspeção de código que o `<img>` do popover (`imagePopperContent`) é
+montado condicionalmente, e não apenas oculto por CSS:
+
+```typescript
+const [isVisible, setIsVisible] = useState(false)
+// ...
+{isVisible && (
+    <div className={classNames(handles.imagePopper, ...)}>
+        <div className={classNames(handles.imagePopperContent, ...)}>
+            <img src={popperImageUrl} ... />
+```
+
+O mount depende de `isVisible`, alternado por `handleMouseEnter`/`handleMouseLeave`.
+Não há `display: none`, `visibility: hidden` ou `opacity: 0` mantendo o nó no DOM.
+**Consequência:** o navegador nunca baixa os previews de todas as variações no
+carregamento da página — apenas o da variação sob hover. Nenhuma correção necessária.
+
+### Considerações Futuras
+
+- ⏳ Avaliar `loading="lazy"` nos swatches abaixo da dobra
+- ⏳ Avaliar formato AVIF/WebP via VTEX Image API para os swatches
+- ⏳ Alinhar `thumbnailImageSize` ao tamanho renderizado real (36) via props do tema,
+  caso a folga de 4px se mostre relevante
+- ⏳ Site Editor visual: `thumbnailImageSize` (e as demais props de tamanho) **não
+  aparecem no CMS novo** até `store/interfaces.json` ganhar `"content"` apontando
+  para `contentSchemas.json`. Manter só `blocks.json` por enquanto — ver seção
+  de 2026-09-04.
+
+---
+
+## ⚠️ Configuração Recomendada no Store Theme
+
+`popperImageSize` deve ser declarado explicitamente para não depender do default do
+app, que é 400:
+
+```json
+{
+  "sunhouse.enhanced-sku-selector": {
+    "props": {
+      "showImagePopper": true,
+      "popperImageSize": 300
+    }
+  }
+}
+```
+
+Não é necessário alterar `imageWidth`/`imageHeight`: elas seguem valendo apenas para
+layout, e o swatch usa o default de 40 do `thumbnailImageSize`.
+
+---
+
+## 📚 Referências
+
+- Arquivos modificados:
+  - `react/components/SKUSelector/utils/index.ts`
+  - `react/components/SKUSelector/components/SelectorItem.tsx`
+  - `react/components/SKUSelector/components/ImagePopper.tsx`
+  - `react/components/SKUSelector/components/Variation.tsx`
+  - `react/components/SKUSelector/components/SKUSelector.tsx`
+  - `react/components/SKUSelector/index.tsx`
+  - `react/components/SKUSelector/Wrapper.tsx`
+  - `docs/README.md`
+
+---
+
+**Desenvolvido por:** Equipe de Desenvolvimento  
+**Revisado por:** -  
+**Status:** ✅ Implementado — validado por medição de rede; pendente inspeção em
+DevTools na PDP após `vtex link`  
+**Data de Conclusão:** 2026-09-01
+
+---
+
+## 📅 2026-09-04 — Exposição de `thumbnailImageSize` e Site Editor
+
+### Objetivo desta rodada
+
+Deixar a prop `thumbnailImageSize` descobrível (schema + docs + i18n) sem mudar
+o fallback de 40 nem a lógica de resize. Decisão consciente: **não ligar a prop
+no Site Editor visual (CMS novo)**; a configuração funcional continua via
+`blocks.json` no Store Theme.
+
+### Site Editor vs `blocks.json` — ponto a revisar no futuro
+
+Há dois mecanismos na VTEX, e este app hoje usa só um deles de forma efetiva:
+
+| Mecanismo | Onde vive | O que o admin lê | Estado neste app |
+|-----------|-----------|------------------|------------------|
+| Schema estático (Site Editor clássico / `vtex.admin-pages`) | `SKUSelectorWrapper.schema` em `Wrapper.tsx` | Formulário do bloco no Pages Admin | `thumbnailImageSize` **está declarada** (`type`, `title`, `default: 40`, `minimum: 1`, `maximum: 3000`) |
+| CMS / Site Editor novo | `store/interfaces.json` → chave `"content"` → `store/contentSchemas.json` | Painel visual de conteúdo do bloco | **Não está ligado.** `interfaces.json` só tem `"component": "SKUSelector"`. A definition `SKUSelector` em `contentSchemas.json` existe, mas só declara `seeMoreLabel` e **ninguém a referencia**. |
+
+Consequência prática:
+
+- Configurar `thumbnailImageSize` / `imageWidth` / `imageHeight` / `popperImageSize`
+  **no `blocks.json` do tema funciona hoje** (inclusive no workspace de dev com
+  `vtex link`). Esse é o caminho oficial desta versão.
+- A prop **não aparece** no Site Editor visual novo. O schema estático em
+  `Wrapper.tsx` só alimenta o Pages Admin clássico; o CMS novo ignora esse
+  objeto se não houver `"content"` na interface.
+- Não ligar agora foi deliberado: uma vez que a prop vira conteúdo editável,
+  valores salvos pelo `vtex.pages-graphql` passam a ter precedência sobre o
+  tema. Além disso, o widget numérico do editor não cobre o formato responsivo
+  `{ desktop, mobile }` que a prop aceita.
+
+Como ligar no futuro, se o admin visual for necessário:
+
+1. Em `store/interfaces.json`, adicionar
+   `"content": { "$ref": "app:sunhouse.enhanced-sku-selector#/definitions/SKUSelector" }`.
+2. Em `store/contentSchemas.json`, declarar `thumbnailImageSize` na definition
+   `SKUSelector` (espelhando `type` / `title` / `default` / `minimum` / `maximum`
+   do schema estático).
+3. Validar que um valor salvo no editor não sobrescreve sem querer o
+   `blocks.json` da loja.
+
+### Messages
+
+Chaves alinhadas ao padrão `admin/editor.skuSelector.{prop}.{title|description}`:
+
+- `admin/editor.skuSelector.title` / `.description` (já referenciadas no schema,
+  antes sem tradução)
+- `admin/editor.skuSelector.thumbnailImageSize.title` / `.description`
+- `admin/editor.skuSelector.seeMoreLabel.title` / `.description` (referenciadas
+  por `contentSchemas.json` e antes ausentes)
+- `store/skuSelector.seeMore` (default de `seeMoreLabel`)
+
+`pt.json` em português, `es.json` em espanhol (`admin/test` e `store/test`
+corrigidos de `"teste"` para `"prueba"`). `intl-equalizer`: todas as chaves
+localizadas.
+
+### Testes
+
+`vtex link` **não** executa `yarn test`. Ele só envia o código ao builder-hub
+e recompila (incluindo `yarn` das deps de `react/package.json`). Os testes
+unitários rodam em CI (`vtex/action-io-app-test` no PR).
+
+Tentativa de 2026-09-04: instalar `@vtex/test-tools@3.4.3` em `react/` para
+rodar o suite localmente. **Revertida.** O builder `react@3.x` usa Node
+16.20.2; o `test-tools` puxou `node-releases@2.0.54`, que exige Node `>=18`,
+e o `vtex link` passou a falhar com `Found incompatible module`.
+
+`react/package.json` e `react/yarn.lock` voltaram ao estado anterior. Não
+colocar `@vtex/test-tools` (nem outras deps de toolchain Node 18+) no
+`package.json` do builder `react/` — o yarn do `vtex link` instala esse
+arquivo no Node 16.
+
+Resultado da execução local *antes* do revert (não faz parte do app
+publicado):
+
+- `isColor.test.ts`: 22/22 passando
+- `SKUSelector.test.tsx`: 30 passando, 6 falhando (legado, não relacionadas
+  a `thumbnailImageSize`)
+
+---
+
+**Status (2026-09-04):** exposição/documentação de `thumbnailImageSize` pronta
+para workspace de dev via `blocks.json`. Site Editor visual propositalmente
+fora de escopo até revisão futura.

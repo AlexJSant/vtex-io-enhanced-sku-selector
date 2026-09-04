@@ -2,7 +2,7 @@ import React, { FC, memo, useState, useRef, useEffect } from 'react'
 import classNames from 'classnames'
 
 import { useSKUSelectorCssHandles } from '../SKUSelectorCssHandles'
-import { changeImageUrlSize } from '../utils'
+import { imageUrlForDisplaySize } from '../utils'
 
 export const CSS_HANDLES = ['imagePopper', 'imagePopperContent', 'imagePopperLabel'] as const
 
@@ -25,15 +25,27 @@ const ImagePopper: FC<ImagePopperProps> = ({
     const [isVisible, setIsVisible] = useState(false)
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
+    const hasPrefetchedRef = useRef(false)
 
-    // Resize image for popper (larger than thumbnail)
-    const popperImageUrl = changeImageUrlSize(
+    // Resize image for popper (larger than thumbnail). The size has to be
+    // written in the url path, since the width/height querystring params are
+    // ignored on /arquivos/ids/ urls.
+    const popperImageUrl = imageUrlForDisplaySize(
         imageUrl,
         popperImageSize,
         popperImageSize
     )
 
     const handleMouseEnter = () => {
+        // Starts downloading during the delay below, since the trigger
+        // thumbnail no longer warms up this image for the popper.
+        if (!hasPrefetchedRef.current && popperImageUrl) {
+            hasPrefetchedRef.current = true
+            const preloader = new window.Image()
+
+            preloader.src = popperImageUrl
+        }
+
         if (timeoutRef.current) {
             clearTimeout(timeoutRef.current)
         }

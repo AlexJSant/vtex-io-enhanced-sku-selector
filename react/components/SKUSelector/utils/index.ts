@@ -285,6 +285,24 @@ function replaceLegacyFileManagerUrl(
   return `${cleanImageUrl(imageUrl)}-${width}-${height}`
 }
 
+/**
+ * Removes size params already present in the querystring, so a new requested
+ * size is not shadowed by the original one (the first param wins in the API).
+ */
+export function stripImageSizeParams(imageUrl: string) {
+  const [baseUrl, queryString] = imageUrl.split('?')
+
+  if (!queryString) return imageUrl
+
+  const remainingParams = queryString
+    .split('&')
+    .filter(param => !/^(width|height|aspect)=/.test(param))
+
+  return remainingParams.length > 0
+    ? `${baseUrl}?${remainingParams.join('&')}`
+    : baseUrl
+}
+
 export function changeImageUrlSize(
   imageUrl: string,
   width: string | number = DEFAULT_WIDTH,
@@ -303,6 +321,44 @@ export function changeImageUrlSize(
   const queryStringSeparator = normalizedImageUrl.includes('?') ? '&' : '?'
 
   return `${normalizedImageUrl}${queryStringSeparator}width=${width}&height=${height}&aspect=true`
+}
+
+/**
+ * Matches the image id segment and its optional size suffix, e.g. both
+ * "/ids/249632" and "/ids/249632-300-300" or "/ids/249632-80-auto".
+ */
+const imageIdSegmentRegex = /(\/ids\/\d+)(-[^/?]*)?/
+
+/**
+ * Requests the image at the given size.
+ *
+ * On /arquivos/ids/ urls the served size comes exclusively from the segment
+ * right after the image id: the width/height querystring params are ignored,
+ * so rewriting that segment is the only way to change what gets downloaded.
+ * Other url shapes still rely on the querystring params.
+ */
+export function imageUrlForDisplaySize(
+  imageUrl: string,
+  width: number,
+  height: number
+) {
+  if (!imageUrl) return imageUrl
+
+  const adjustedWidth = Math.min(width, MAX_WIDTH)
+  const adjustedHeight = Math.min(height, MAX_HEIGHT)
+  const cleanedImageUrl = stripImageSizeParams(imageUrl)
+  const [path, queryString] = cleanedImageUrl.split('?')
+
+  if (!imageIdSegmentRegex.test(path)) {
+    return changeImageUrlSize(cleanedImageUrl, adjustedWidth, adjustedHeight)
+  }
+
+  const resizedPath = path.replace(
+    imageIdSegmentRegex,
+    `$1-${adjustedWidth}-${adjustedHeight}`
+  )
+
+  return queryString ? `${resizedPath}?${queryString}` : resizedPath
 }
 
 export const DEFAULT_BOTTOM_MARGIN = 7

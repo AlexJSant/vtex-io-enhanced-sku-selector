@@ -77,6 +77,7 @@ The app exports the following block:
 | `showValueNameForImageVariation` | `boolean`                                                               | Shows the variation value name for image variations (deprecated, use `showValueForVariation` instead)                                           | `false`       |
 | `imageHeight`                    | `number` \| `object`                                                    | Height of variation images. Can be a number or responsive object with `desktop` and `mobile` keys                                               | `40`          |
 | `imageWidth`                     | `number` \| `object`                                                    | Width of variation images. Can be a number or responsive object with `desktop` and `mobile` keys                                               | `40`          |
+| `thumbnailImageSize`             | `number` \| `object`                                                    | Size, in pixels, of the image **downloaded** for the variation thumbnail (requested from the VTEX Image API and also used to build the `srcset` at `2x`). Independent from `imageWidth`/`imageHeight`, which only control the rendered box, so CSS overrides in the store theme never inflate the downloaded file. Can be responsive with `desktop` and `mobile` keys | `40`          |
 | `thumbnailImage`                 | `string`                                                                | **Optional:** Variation name to filter images by. Supports composite variations like "Top Color", "Base Color". **Note:** This prop is not required for thumbnails to work. The component automatically detects color variations and matches images based on the `imageLabel` in the VTEX Catalog. You can declare this prop without errors, but it's recommended to **omit it** for optimal functionality. | -             |
 | `visibleVariations`               | `string[]`                                                              | **Optional:** Array of variation names to display. If not provided, all variations are shown. **Note:** This prop is not required for thumbnails to work. The component automatically displays all variations with proper image matching. You can declare this prop without errors, but it's recommended to **omit it** for optimal functionality. | -             |
 | `showVariationsLabels`            | `enum` (`'none'`, `'variation'`, `'itemValue'`, `'variationAndItemValue'`) | Controls how variation labels are displayed                                                                                                     | `'variation'` |
@@ -92,7 +93,7 @@ The app exports the following block:
 | `showImagePopper`                | `boolean`                                                               | Enables image popper (tooltip) on hover for desktop. Shows enlarged image when hovering over thumbnails                                         | `false`       |
 | `popperImageSize`                | `number`                                                                | Size of the image displayed in the popper in pixels. Only applies when `showImagePopper` is `true`                                              | `400`         |
 
-#### `imageHeight` and `imageWidth` object:
+#### `imageHeight`, `imageWidth` and `thumbnailImageSize` object:
 
 When using responsive values, the object should follow this structure:
 
@@ -109,6 +110,76 @@ When using responsive display modes:
 | --------- | -------- | ------------------------------ | ------------- |
 | `desktop` | `string` | Display mode for desktop (`'default'` or `'slider'`) | -             |
 | `mobile`  | `string` | Display mode for mobile (`'default'` or `'slider'`)   | -             |
+
+### Image sizing props: `thumbnailImageSize`, `imageWidth`/`imageHeight` and `popperImageSize`
+
+The app exposes three **independent** image size props. Changing one never changes the others, and each one answers a different question:
+
+| Prop                          | What it controls                                                                                       | Affects the downloaded file? | Affects the rendered layout? | Default |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------- | ---------------------------- | ------- |
+| `thumbnailImageSize`          | The size requested from the VTEX Image API for the **swatch image file** (also used to build the `2x` entry of the `srcset`) | ✅ Yes                        | ❌ No                         | `40`    |
+| `imageWidth` / `imageHeight`  | The **rendered box** of the swatch in the page (the CSS dimensions of the thumbnail element)            | ❌ No                         | ✅ Yes                        | `40`    |
+| `popperImageSize`             | The size requested from the VTEX Image API for the **image shown inside the popover** (and its `max-width`/`max-height`). Only used when `showImagePopper` is `true` | ✅ Yes (popover image)        | ✅ Yes (popover image)        | `400`   |
+
+**Why `thumbnailImageSize` is decoupled from `imageWidth`/`imageHeight`**
+
+Store themes frequently override the swatch dimensions via CSS handles (for example, `.skuSelectorItemImage { width: 72px }`). If the downloaded file size were derived from `imageWidth`/`imageHeight`, those CSS overrides would either serve a blurry image or silently inflate the downloaded bytes. Keeping `thumbnailImageSize` separate means the store decides the **payload** explicitly, while the layout stays free to change through props or CSS.
+
+Practical consequences:
+
+- Making the swatch visually bigger (`imageWidth`/`imageHeight`, or CSS) **does not** improve its sharpness by itself — raise `thumbnailImageSize` as well.
+- Raising `thumbnailImageSize` **does not** make the swatch visually bigger — it only downloads a higher resolution file for the same box.
+- `popperImageSize` is completely unrelated to both: the popover always downloads its own image at that size.
+
+**Recommended pairing:** keep `thumbnailImageSize` equal to (or slightly above) the largest rendered swatch dimension across breakpoints. The component already requests a `2x` variant for retina screens, so there is no need to double the value manually.
+
+**Example: store theme configuration with the three props together**
+
+```json
+{
+  "enhanced-sku-selector": {
+    "props": {
+      "imageWidth": { "desktop": 40, "mobile": 40 },
+      "imageHeight": { "desktop": 40, "mobile": 40 },
+      "thumbnailImageSize": 40,
+      "showImagePopper": true,
+      "popperImageSize": 400
+    }
+  }
+}
+```
+
+**Example: a store that wants a bigger swatch than the `40` default**
+
+```json
+{
+  "enhanced-sku-selector": {
+    "props": {
+      "imageWidth": { "desktop": 72, "mobile": 56 },
+      "imageHeight": { "desktop": 72, "mobile": 56 },
+      "thumbnailImageSize": { "desktop": 72, "mobile": 56 },
+      "showImagePopper": true,
+      "popperImageSize": 600
+    }
+  }
+}
+```
+
+**Example: a store that wants a smaller, lighter swatch**
+
+```json
+{
+  "enhanced-sku-selector": {
+    "props": {
+      "imageWidth": { "desktop": 28, "mobile": 28 },
+      "imageHeight": { "desktop": 28, "mobile": 28 },
+      "thumbnailImageSize": 28
+    }
+  }
+}
+```
+
+> 💡 If you omit `thumbnailImageSize`, the app keeps downloading swatch images at `40px` regardless of the values set for `imageWidth`/`imageHeight`.
 
 ### How Thumbnails Work
 
@@ -141,11 +212,14 @@ The Enhanced SKU Selector automatically displays visual thumbnails for color var
   "enhanced-sku-selector": {
     "props": {
       "imageHeight": { "desktop": 60, "mobile": 60 },
-      "imageWidth": { "desktop": 60, "mobile": 60 }
+      "imageWidth": { "desktop": 60, "mobile": 60 },
+      "thumbnailImageSize": { "desktop": 60, "mobile": 60 }
     }
   }
 }
 ```
+
+> ℹ️ `imageWidth`/`imageHeight` define the rendered swatch box, while `thumbnailImageSize` defines the size of the image file that gets downloaded. See [Image sizing props](#image-sizing-props-thumbnailimagesize-imagewidthimageheight-and-popperimagesize) for details.
 
 > 💡 **Tip:** You don't need to declare `visibleVariations` or `thumbnailImage` props. The component automatically detects all color variations and displays thumbnails when the specification name matches a color keyword and images have the correct `imageLabel` format.
 

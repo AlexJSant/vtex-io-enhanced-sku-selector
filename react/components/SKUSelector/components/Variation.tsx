@@ -29,6 +29,7 @@ interface Props {
   showValueForVariation: boolean
   imageHeight?: number
   imageWidth?: number
+  thumbnailImageSize?: number
   showBorders?: boolean
   showLabel: ShowVariationsLabels
   containerClasses?: string
@@ -56,6 +57,7 @@ const Variation: FC<Props> = ({
   variation,
   imageWidth,
   imageHeight,
+  thumbnailImageSize,
   showBorders,
   maxSkuPrice,
   seeMoreLabel,
@@ -159,6 +161,7 @@ const Variation: FC<Props> = ({
         variationValueOriginalName={option.originalName}
         imageHeight={imageHeight}
         imageWidth={imageWidth}
+        thumbnailImageSize={thumbnailImageSize}
         showBorders={showBorders}
         imageUrl={
           option.image &&

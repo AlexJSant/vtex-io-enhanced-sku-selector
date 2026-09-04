@@ -260,6 +260,7 @@ interface Props {
   showValueForVariation?: ShowValueForVariation
   imageHeight?: number
   imageWidth?: number
+  thumbnailImageSize?: number
   thumbnailImage?: string
   showVariationsLabels?: ShowVariationsLabels
   variationsSpacing?: number
@@ -322,6 +323,7 @@ const SKUSelectorContainer: FC<Props> = ({
   skuSelected,
   imageWidth,
   imageHeight,
+  thumbnailImageSize,
   thumbnailImage,
   variationsSpacing,
   showVariationsLabels = 'variation',
@@ -532,6 +534,7 @@ const SKUSelectorContainer: FC<Props> = ({
       imageWidth={imageWidth}
       displayMode={responsiveDisplayMode}
       imageHeight={imageHeight}
+      thumbnailImageSize={thumbnailImageSize}
       seeMoreLabel={seeMoreLabel}
       onSelectItem={onSelectItem}
       variationsSpacing={variationsSpacing}

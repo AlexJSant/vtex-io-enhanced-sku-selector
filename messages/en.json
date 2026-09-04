@@ -1,6 +1,13 @@
 {
   "admin/test": "test",
+  "admin/editor.skuSelector.title": "Enhanced SKU Selector",
+  "admin/editor.skuSelector.description": "Product variation selector with image thumbnails for composite color variations",
+  "admin/editor.skuSelector.thumbnailImageSize.title": "Thumbnail downloaded image size",
+  "admin/editor.skuSelector.thumbnailImageSize.description": "Size, in pixels, of the image file downloaded for each variation thumbnail. Independent from the rendered size defined by imageWidth/imageHeight.",
+  "admin/editor.skuSelector.seeMoreLabel.title": "\"See more\" label",
+  "admin/editor.skuSelector.seeMoreLabel.description": "Text of the button shown when there are more variations than the limit defined by maxItems",
   "store/test": "test",
+  "store/skuSelector.seeMore": "See more",
   "store/sku-selector.select.placeholder": "Choose an option",
   "store/sku-selector.variation.select-an-option": "Select an option"
 }
